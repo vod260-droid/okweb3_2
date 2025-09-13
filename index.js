@@ -4,35 +4,37 @@ import fetch from 'node-fetch';
 const app = express();
 const port = process.env.PORT || 8080;
 
-// 支持 JSON 请求体
 app.use(express.json());
 
+// 所有 /api/okxweb3/* 请求都转发
 app.all('/api/okxweb3/*', async (req, res) => {
   try {
     // 去掉 /api/okxweb3 前缀
-    let targetPath = req.url.replace(/^\/api\/okxweb3/, '');
+    let targetPath = req.path.replace(/^\/api\/okxweb3/, '');
 
-    // 避免 ?...path=xxx 这种额外参数
-    if (targetPath.includes('&...path=')) {
-      targetPath = targetPath.split('&...path=')[0];
+    // 保留原始 query 顺序
+    const query = req.originalUrl.split('?')[1] || '';
+    if (query.includes('...path=')) {
+      targetPath += '?' + query.split('&...path=')[0];
+    } else if (query) {
+      targetPath += '?' + query;
     }
 
     const targetUrl = `https://web3.okx.com${targetPath}`;
 
-    // 构造请求选项
+    // 构造请求
     const options = {
       method: req.method,
       headers: { ...req.headers },
       body: req.method !== 'GET' && req.body ? JSON.stringify(req.body) : undefined
     };
 
-    // 删除 Host，防止被目标服务器拒绝
-    delete options.headers.host;
+    delete options.headers.host; // 防止被目标拒绝
 
     const response = await fetch(targetUrl, options);
-
     const text = await response.text();
 
+    // 返回原始响应
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
     res.send(text);
